@@ -1,4 +1,4 @@
-# Raisin Classification Using Machine Learning
+# Raisin Classification Using Multiple Logistic Regression
 
 ## Introduction:
 Welcome to the Raisin Classification project repository! This project aims to develop a machine learning-based classification system to differentiate between two varieties of raisins: Kecimen and Besni. The repository contains the dataset, code, and documentation necessary to reproduce the results and further explore the classification model.
