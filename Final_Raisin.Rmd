@@ -1,0 +1,323 @@
+---
+title: "Final_raisin"
+author: "Thu Tran"
+date: "2024-04-17"
+output:
+  pdf_document: 
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Load data
+```{r}
+library(readxl)
+library(car)
+library(tidyverse)
+raisin<-read_excel("Raisin_Dataset.xlsx")
+raisin$Class<-factor(raisin$Class)
+str(raisin)
+```
+
+
+# 2. EDA (Exploratory Data Analysis)
+```{r}
+options(scipen = 999)
+#Summary table
+library(skimr)
+library(gt)
+skim_tb<-skim(raisin)
+
+
+raisin_summary<-data.frame(
+  Type = skim_tb$skim_type,
+  Variables = skim_tb$skim_variable,
+  Missing = skim_tb$n_missing,
+  Min = skim_tb$numeric.p0,
+  Mean = skim_tb$numeric.mean,
+  Median = skim_tb$numeric.p50,
+  Max = skim_tb$numeric.p100,
+  SD = skim_tb$numeric.sd
+)
+raisin_summary[2:8,4:8]<-round(raisin_summary[2:8,4:8],2)
+gt(raisin_summary)%>%
+  tab_header(
+    title = "STATISTICAL SUMMARY TABLE"
+  )
+```
+```{r}
+raisin[c(86,291),]
+```
+
+
+\newpage
+```{r,fig.height=3.5,fig.width=3.5}
+# Pie Chart from data frame with Appended Sample Sizes
+mytable <- table(raisin$Class)
+lbls <- paste(names(mytable), "\n", mytable, sep="")
+pie(mytable, labels = lbls, clockwise = T,col=c("#EC9706","#AA9385"),
+   main="Pie Chart of Raisin's Class")
+```
+
+```{r,fig.height=3.5,fig.width=3.5}
+# Histogram of raisin 
+plot(raisin$Class,col=c("#EC9706","#AA9385"), main= "Histogram of the Raisin's types")
+```
+```{r, fig.height= 8, fig.width=8}
+# Multiple side-by side boxplot
+par(mfrow=c(3,3))  # Set up the layout
+
+for (col_name in names(raisin)[1:7]) {
+  boxplot(raisin[[col_name]] ~ raisin$Class, 
+          data = raisin,
+          main = col_name,
+          xlab = "Class",
+          ylab = col_name,
+          col = c("#EC9706","#AA9385"))
+}
+
+```
+ According to the multiple boxplot, the Besni raisin seems to have higher median in each measurement than the Kecimen raisin.
+ 
+\newpage
+c. Matrix Scatter plot
+```{r, fig.height= 8, fig.width=8}
+class_col<-ifelse(raisin$Class=="Besni","#EC9706","#612302")
+pairs(raisin[1:7],
+      pch = 21,
+      col = class_col,
+      main = "Matrix Scatter Plot")
+```
+\newpage
+```{r}
+# Correlation Heatmap
+library(corrplot)
+corr_matrix<-cor(raisin[,1:7])
+corrplot(corr_matrix, method="color")
+```
+
+\newpage
+# 3. Statistic Analysis
+## a. Full model
+```{r}
+fullmodel<-glm(Class ~ . ,data = raisin, family = binomial)
+summary(fullmodel)
+```
+```{r}
+nullmodel<-glm(Class~1,data=raisin,family=binomial)
+summary(nullmodel)
+```
+
+## b. Variable selection:
+### AIC backward:
+```{r}
+model1<-step(fullmodel,trace=0)
+summary(model1)
+```
+
+```{r}
+# Multicolinearity
+vif(model1)
+```
+Since the Area and CovexArea has a high multi colinearity. We decide to drop ConvexArea in the model1
+\newpage
+```{r}
+model2<-glm(formula = Class ~Area+ MajorAxisLength + MinorAxisLength + Perimeter,
+            family = binomial, data = raisin)
+summary(model2)
+```
+```{r}
+par(mfrow=c(2,2))
+plot(model2,1:4)
+```
+
+
+## c. Transformation:
+```{r}
+
+PT<-powerTransform(cbind(Area,MajorAxisLength,MinorAxisLength, Perimeter)~1,data=raisin)
+summary(PT)
+```
+
+\newpage
+```{r}
+# Transform predictors
+transform1<-glm(Class ~ I((Area^(-1/5)-1)/(-1/5))+I((MajorAxisLength^(-1/3)-1)/(-1/3)) + I((MinorAxisLength^(-1/3)-1)/(-1/3))+ I((Perimeter^(-1/2)-1)/(-1/2)),
+                data = raisin, family = binomial)
+summary(transform1)
+```
+
+
+## d. Evaluation:
+```{r}
+library(pROC)
+# Prediction
+logistic_models <- list(fullmodel,model1,model2,transform1, nullmodel)
+Accuracy_score <- c()
+confusion_matrix <-list()
+AUC_score<-c()
+AIC_score<-c()
+
+for (i in seq_along(logistic_models)) {
+  probabilities <- predict(logistic_models[[i]], newdata = raisin, type="response")
+  predictions <- ifelse(probabilities>0.5,"Kecimen","Besni")
+  cm<-table(prediction =predictions, actual=raisin$Class )
+  confusion_matrix[[i]]<-cm
+  acc<-sum(diag(cm))/900
+  Accuracy_score[[i]]<-acc
+  roc_obj<-roc(raisin$Class,probabilities)
+  auc_score<-auc(roc_obj)
+  AUC_score[[i]]<-auc_score
+  aic_score<-AIC(logistic_models[[i]])
+  AIC_score[[i]]<-aic_score
+}
+
+```
+```{r}
+models=c('fullmodel','model1','model2','transform1', 'nullmodel')
+cbind(models,Accuracy_score,AUC_score,AIC_score)
+```
+
+
+```{r}
+logic_tb<-data.frame(Models=models,
+                     Num.Predictors= c(7,5,4,4,0),
+                     Accuracy=array(unlist(Accuracy_score), dim = c(length(Accuracy_score))),
+                     AUC=array(unlist(AUC_score), dim = c(length(AUC_score))),
+                     AIC=array(unlist(AIC_score), dim = c(length(AIC_score)))
+                     )
+
+
+```
+```{r}
+gt(logic_tb)%>%
+  tab_header(
+    title = "MULTIPLE LOGISTICS REGRESSION MODELS"
+  )
+```
+
+
+=> Conclusion: 'transform1' has the good value in most of metrics, however the p_value in the summary table shows that the coefficient are not significant. The full model also did a great job in clasification of the raisin model, however the evaluate metric is lower than 'model2'. In conclusion, we choose 'model2' which has 4 predictors (Area, MajorAxisLength, MinorAxisLength, Perimeter) as the final model. 
+
+\newpage
+# 4. Cross validation:
+## a. Split data:
+```{r}
+set.seed(666)
+n<-nrow(raisin)
+train_index<-sample(1:n,round(0.7*n))
+trainset<-raisin[train_index,]
+testset<-raisin[-train_index,]
+```
+
+## b. Our model:
+```{r}
+# Fit model on train set
+glm.train<-glm(Class ~  Area + MajorAxisLength + MinorAxisLength + 
+    Perimeter, data = trainset, family = binomial)
+summary(glm.train)
+```
+\newpage
+```{r}
+# Evaluate
+prob.test <- predict (glm.train, newdata=testset, type= "response")
+preds.test<- ifelse(prob.test >0.5,"Kecimen","Besni")
+# Confusion matrix
+cm1<- table (prediction = preds.test,
+            actual= testset$Class)
+addmargins(cm1)
+```
+```{r}
+# Accuracy
+Accuracy1<-sum(diag(cm1))/270
+#Sensitivity (TP) identify Kecimen  type of raisin
+Sensitivity1 <-cm1[2,2]/135
+# Specificity (TF)
+Specificity1<-cm1[1,1]/135
+# AUC
+roc.test <- roc(testset$Class,prob.test)
+auc_glm<-auc(roc.test)
+```
+
+\newpage
+## c. Decision Tree:
+```{r}
+# Fit trainset with decision tree
+library(rpart)
+tree.train<-rpart(Class~.,data=trainset, method= "class")
+```
+```{r}
+# Evaluate
+tree_prob <- predict (tree.train, newdata=testset)[,2]
+tree_pred <- predict (tree.train, newdata=testset, type="class")
+# Confusion matrix
+cm2<- table (prediction = tree_pred,
+            actual= testset$Class)
+addmargins(cm2)
+```
+```{r}
+# Accuracy
+Accuracy2<-sum(diag(cm2))/270
+#Sensitivity (TP) identify Kecimen  type of raisin
+Sensitivity2 <-cm2[2,2]/135
+# Specificity (TF)
+Specificity2<-cm2[1,1]/135
+# AUC
+tree.roc <- roc(testset$Class,tree_prob)
+auc_tree<-auc(tree.roc)
+```
+
+\newpage
+## d. Random Forest:
+```{r,include=FALSE}
+library(randomForest)
+```
+```{r}
+# Fit trainset with random forest
+# library(randomForest)
+set.seed(123)
+rf.train<-randomForest(Class~.,data=trainset,type="classification")
+```
+```{r}
+# Evaluate
+rf_prob <- predict (rf.train, newdata=testset,type="prob")[,2]
+rf_pred <- predict (rf.train, newdata=testset, type="class")
+# Confusion matrix
+cm3<- table (prediction = rf_pred,
+            actual= testset$Class)
+addmargins(cm3)
+```
+```{r}
+# Accuracy
+Accuracy3<-sum(diag(cm3))/270
+#Sensitivity (TP) identify Kecimen  type of raisin
+Sensitivity3 <-cm3[2,2]/135
+# Specificity (TF)
+Specificity3<-cm3[1,1]/135
+# AUC
+rf.roc <- roc(testset$Class,rf_prob)
+auc_rf<-auc(rf.roc)
+```
+\newpage
+## e. Comparative table:
+
+```{r}
+tb1<-data.frame(Models= c("Logistic Regression","Decision Tree","Random Forest"),
+           Accuracy= c(round(Accuracy1,3),round(Accuracy2,3),round(Accuracy3,3)),
+           Sensitivity=c(round(Sensitivity1,3),round(Sensitivity2,3),round(Sensitivity3,3)),
+           Specificity=c(round(Specificity1,3),round(Specificity2,3),round(Specificity3,3)),
+           AUC= c(round(auc_glm,3),round(auc_tree,3),round(auc_rf,3)))
+gt(tb1)%>%
+  tab_header(
+    title = "MODELS COMPARATIVE TABLE"
+  )
+```
+
+Conclusion: Out final model did a great job in predicting the model, most of the metrics are higher than other machine learning method (decision tree, random forest)
+
+
+
+
