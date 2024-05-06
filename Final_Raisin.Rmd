@@ -190,7 +190,7 @@ gt(logic_tb)%>%
 ```
 
 
-=> Conclusion: 'transform1' has the good value in most of metrics, however the p_value in the summary table shows that the coefficient are not significant. The full model also did a great job in clasification of the raisin model, however the evaluate metric is lower than 'model2'. In conclusion, we choose 'model2' which has 4 predictors (Area, MajorAxisLength, MinorAxisLength, Perimeter) as the final model. 
+=> Conclusion: The full model also did a great job in clasification of the raisin model, however the evaluate metric is lower than 'model2'. In conclusion, we choose 'model2' which has 4 predictors (Area, MajorAxisLength, MinorAxisLength, Perimeter) as the final model. 
 
 \newpage
 # 4. Cross validation:
