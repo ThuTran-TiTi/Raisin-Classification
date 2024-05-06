@@ -1,6 +1,6 @@
 ---
 title: "Final_raisin"
-author: "Thu Tran"
+author: "Thu Tran - Ly Nguyen - Huichan Lee"
 date: "2024-04-17"
 output:
   pdf_document: 
